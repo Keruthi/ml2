@@ -1,4 +1,4 @@
 pandas
-nampy
+
 Flask
 pickle

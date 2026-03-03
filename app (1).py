@@ -1,57 +1,71 @@
 from flask import Flask, request, jsonify
 import pickle
 import pandas as pd
+import matplotlib.pyplot as plt
+import io
+import base64
 
-# Initialize a Flask application instance
 app = Flask(__name__)
 
-# Load the logistic regression model
+# Load model
 with open('logistic_regression_model.pkl', 'rb') as file:
     model = pickle.load(file)
 
-# Load the standard scaler
+# Load scaler
 with open('standard_scaler.pkl', 'rb') as file:
     scaler = pickle.load(file)
 
-# Define the feature columns - ensure this matches the order used during training
-feature_columns = ['rainfall_mm', 'storm_event_flag', 'wet_dry_index', 'inflow_m3_hr',
-                   'BOD_in', 'COD_in', 'TSS_in', 'TN_in', 'TP_in', 'NH4_in',
-                   'aeration_rate', 'sludge_recirculation', 'chemical_dose',
-                   'HRT', 'SRT', 'DO_setpoint', 'energy_kwh', 'total_operational_cost']
+feature_columns = [
+    'rainfall_mm', 'storm_event_flag', 'wet_dry_index', 'inflow_m3_hr',
+    'BOD_in', 'COD_in', 'TSS_in', 'TN_in', 'TP_in', 'NH4_in',
+    'aeration_rate', 'sludge_recirculation', 'chemical_dose',
+    'HRT', 'SRT', 'DO_setpoint', 'energy_kwh', 'total_operational_cost'
+]
 
 @app.route('/predict', methods=['POST'])
 def predict():
+
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
 
-    data = request.get_json(force=True)
-    
-    # Ensure data is a dictionary
-    if not isinstance(data, dict):
-        return jsonify({"error": "Invalid JSON format. Expected a dictionary."}), 400
+    data = request.get_json()
 
     try:
-        # Convert incoming JSON data to a pandas DataFrame
         input_df = pd.DataFrame([data], columns=feature_columns)
-
-        # Preprocess the data using the loaded scaler
         scaled_input = scaler.transform(input_df)
 
-        # Make a prediction using the loaded model
         prediction = model.predict(scaled_input)
         prediction_proba = model.predict_proba(scaled_input)
 
-        # Return the prediction as a JSON response
-        return jsonify({
-            "prediction": int(prediction[0]),
-            "probability_class_0": float(prediction_proba[0][0]),
-            "probability_class_1": float(prediction_proba[0][1])
-        })
-    except KeyError as e:
-        return jsonify({"error": f"Missing expected feature in JSON data: {e}"}), 400
-    except Exception as e:
-        return jsonify({"error": f"An unexpected error occurred: {e}"}), 500
+        prob_0 = float(prediction_proba[0][0])
+        prob_1 = float(prediction_proba[0][1])
 
-# To run the app, you would typically use:
-# if __name__ == '__main__':
-#     app.run(debug=True)
+        # --------- Create Graph ----------
+        plt.figure()
+        plt.bar(['Class 0', 'Class 1'], [prob_0, prob_1])
+        plt.xlabel("Classes")
+        plt.ylabel("Probability")
+        plt.title("Prediction Probability")
+
+        # Save graph to memory
+        img = io.BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+        plt.close()
+
+        graph_url = base64.b64encode(img.getvalue()).decode()
+
+        # --------- Return JSON ----------
+        return jsonify({
+            "prediction_text": f"Predicted Class: {int(prediction[0])}",
+            "probability_class_0": prob_0,
+            "probability_class_1": prob_1,
+            "graph": graph_url
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == '__main__':
+    app.run(debug=True)

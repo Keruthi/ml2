@@ -1,9 +1,12 @@
 from flask import Flask, request, jsonify
 import pickle
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # ✅ IMPORTANT for server (no GUI)
 import matplotlib.pyplot as plt
 import io
 import base64
+import os
 
 app = Flask(__name__)
 
@@ -21,6 +24,10 @@ feature_columns = [
     'aeration_rate', 'sludge_recirculation', 'chemical_dose',
     'HRT', 'SRT', 'DO_setpoint', 'energy_kwh', 'total_operational_cost'
 ]
+
+@app.route('/')
+def home():
+    return "ML Prediction API is Running 🚀"
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -40,14 +47,13 @@ def predict():
         prob_0 = float(prediction_proba[0][0])
         prob_1 = float(prediction_proba[0][1])
 
-        # --------- Create Graph ----------
+        # Create Graph
         plt.figure()
         plt.bar(['Class 0', 'Class 1'], [prob_0, prob_1])
         plt.xlabel("Classes")
         plt.ylabel("Probability")
         plt.title("Prediction Probability")
 
-        # Save graph to memory
         img = io.BytesIO()
         plt.savefig(img, format='png')
         img.seek(0)
@@ -55,7 +61,6 @@ def predict():
 
         graph_url = base64.b64encode(img.getvalue()).decode()
 
-        # --------- Return JSON ----------
         return jsonify({
             "prediction_text": f"Predicted Class: {int(prediction[0])}",
             "probability_class_0": prob_0,
@@ -67,5 +72,7 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 
+# ✅ IMPORTANT FIX FOR RENDER
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)

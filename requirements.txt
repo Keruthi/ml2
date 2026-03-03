@@ -1,4 +1,4 @@
+flask
 pandas
-
-Flask
-pickle
+matplotlib
+scikit-learn
